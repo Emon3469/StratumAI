@@ -24,6 +24,7 @@ StratumAI/
 │   ├── DOCS/           design notes
 │   └── evals/          golden dataset
 ├── frontend/           Next.js app (deployed to Vercel)
+├── docker-compose.yml  API + web stack for local Docker runs
 └── render.yaml         Render blueprint
 ```
 
@@ -58,6 +59,33 @@ Requirements: Python 3.12+, Node.js 20+.
    ```
 
 Open http://localhost:3000. Interactive API docs are at http://localhost:8000/docs.
+
+## Running with Docker
+
+Everything above also runs as containers, so you only need Docker (no local Python or Node).
+
+```bash
+cp .env.example .env      # fill in at least one LLM provider key
+docker compose up --build
+```
+
+- Web app: http://localhost:3000
+- API: http://localhost:8000, interactive docs at http://localhost:8000/docs
+
+Notes:
+
+- `docker-compose.yml` builds `backend/Dockerfile` (Python 3.12 slim, non-root, `HEALTHCHECK` on `/health`) and `frontend/Dockerfile` (Next.js standalone output on Node 22 alpine). The web container waits for the API to report healthy.
+- The FlashRank reranker model is downloaded on first use into the `flashrank-cache` volume, so the cache survives rebuilds.
+- The API image ships the ingestion dependencies and `DATA/true_data`, so the knowledge base can be indexed from the container:
+
+  ```bash
+  docker compose exec api python -m app.ingestion.processor DATA/true_data --recreate
+  ```
+
+- `NEXT_PUBLIC_API_URL` is compiled into the browser bundle at build time and defaults to `http://localhost:8000`. Set it before `docker compose up` if the API lives somewhere else.
+- Everything else (single containers, `docker run`, other orchestrators) works from the same Dockerfiles; `render.yaml` stays the source of truth for the hosted deployment.
+
+`.github/workflows/docker.yml` builds both images on every push and pull request so Dockerfile changes cannot rot unnoticed.
 
 ## Testing
 
